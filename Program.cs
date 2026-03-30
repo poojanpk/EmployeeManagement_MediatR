@@ -1,6 +1,9 @@
 using EmployeeManagement_MediatR.Behaviors;
+using EmployeeManagement_MediatR.Jobs;
 using EmployeeManagement_MediatR.Repositories;
 using FluentValidation;
+using Hangfire;
+using Hangfire.InMemory;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,11 +21,22 @@ builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 
 builder.Services.AddSingleton<IEmployeeRepository, InMemoryEmployeeRepository>();
 
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseInMemoryStorage());
+
+builder.Services.AddHangfireServer();
+
+builder.Services.AddTransient<IEmployeeReportJob, EmployeeReportJob>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseHangfireDashboard();
 }
 
 app.UseHttpsRedirection();
@@ -30,5 +44,10 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+RecurringJob.AddOrUpdate<IEmployeeReportJob>(
+    "employee-daily-report",
+    job => job.GenerateReportAsync(),
+    Cron.Daily);
 
 app.Run();
