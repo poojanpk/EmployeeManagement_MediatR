@@ -21,31 +21,37 @@ public class EmployeeReportJob : IEmployeeReportJob
         _logger.LogInformation("Starting employee report generation at {Time}", DateTime.UtcNow);
 
         var employees = await _employeeRepository.GetAllAsync();
-        var employeeList = employees.ToList();
 
-        var totalCount = employeeList.Count;
-        var activeCount = employeeList.Count(e => e.IsActive);
-        var inactiveCount = totalCount - activeCount;
+        // Single-pass aggregation: compute all statistics in one enumeration
+        int totalCount = 0;
+        int activeCount = 0;
+        var departmentStats = new Dictionary<string, (int Count, double TotalSalary)>(capacity: 10, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var employee in employees)
+        {
+            totalCount++;
+            if (employee.IsActive) activeCount++;
+
+            if (departmentStats.TryGetValue(employee.Department, out var stats))
+            {
+                departmentStats[employee.Department] = (stats.Count + 1, stats.TotalSalary + (double)employee.Salary);
+            }
+            else
+            {
+                departmentStats[employee.Department] = (1, (double)employee.Salary);
+            }
+        }
 
         _logger.LogInformation(
             "Employee Summary - Total: {Total}, Active: {Active}, Inactive: {Inactive}",
-            totalCount, activeCount, inactiveCount);
+            totalCount, activeCount, totalCount - activeCount);
 
-        var departmentGroups = employeeList
-            .GroupBy(e => e.Department)
-            .Select(g => new
-            {
-                Department = g.Key,
-                Count = g.Count(),
-                AverageSalary = g.Any() ? g.Average(e => (double)e.Salary) : 0d
-            })
-            .OrderByDescending(g => g.Count);
-
-        foreach (var group in departmentGroups)
+        foreach (var kvp in departmentStats.OrderByDescending(d => d.Value.Count))
         {
+            var avgSalary = kvp.Value.TotalSalary / kvp.Value.Count;
             _logger.LogInformation(
                 "Department '{Department}': {Count} employee(s), Average Salary: {AverageSalary:F2}",
-                group.Department, group.Count, group.AverageSalary);
+                kvp.Key, kvp.Value.Count, avgSalary);
         }
 
         _logger.LogInformation("Employee report generation completed at {Time}", DateTime.UtcNow);

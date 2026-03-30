@@ -35,8 +35,14 @@ public class HangfireJobsController : ControllerBase
     /// </summary>
     [HttpPost("employee-report/schedule")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public IActionResult ScheduleEmployeeReport([FromQuery] int delayInMinutes = 5)
     {
+        if (delayInMinutes <= 0)
+        {
+            return BadRequest(new { Message = "delayInMinutes must be a positive integer" });
+        }
+
         var jobId = _backgroundJobClient.Schedule<IEmployeeReportJob>(
             job => job.GenerateReportAsync(),
             TimeSpan.FromMinutes(delayInMinutes));

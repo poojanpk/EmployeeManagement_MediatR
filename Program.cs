@@ -25,9 +25,15 @@ builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseInMemoryStorage());
+    .UseInMemoryStorage(new InMemoryStorageOptions
+    {
+        MaxExpirationTime = TimeSpan.FromHours(6)
+    }));
 
-builder.Services.AddHangfireServer();
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = Environment.ProcessorCount * 2;
+});
 
 builder.Services.AddTransient<IEmployeeReportJob, EmployeeReportJob>();
 
